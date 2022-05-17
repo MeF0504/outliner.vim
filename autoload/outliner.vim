@@ -2,8 +2,8 @@
 " Description:  vim plugin to show a simple outliner.
 " Author:       MeF
 
-let s:name_def = 'outliner.vim'
-function! s:create_win() abort
+function! s:get_config() abort
+    let name_def = 'outliner'
     let width_def = 30
     let mod_def = 'topleft vertical'
     if exists('g:outliner_win_conf')
@@ -20,13 +20,18 @@ function! s:create_win() abort
         if has_key(g:outliner_win_conf, 'name')
             let name = g:outliner_win_conf.name
         else
-            let name = s:name_def
+            let name = name_def
         endif
     else
         let width = width_def
         let mod = mod_def
-        let name = s:name_def
+        let name = name_def
     endif
+    return [width, mod, name]
+endfunction
+
+function! s:create_win() abort
+    let [width, mod, name] = s:get_config()
 
     execute printf('%s %dnew %s', mod, width, name)
 
@@ -44,7 +49,7 @@ function! s:create_win() abort
     setlocal winfixwidth
     setlocal nolist
 
-    setlocal foldexpr=getline(v:lnum)[0]==\"\\t\"
+    setlocal foldexpr=getline(v:lnum)[:3]==\"\ \ \ \ \"
     setlocal foldmethod=expr
     setlocal filetype=outliner
 endfunction
@@ -64,6 +69,78 @@ endfunction
 function! s:outliner_highlight() abort
     syntax match OutLinerKeys /^\S.*/
     highlight default link OutLinerKeys Statement
+endfunction
+
+let s:bufid = -1
+let s:popid = -1
+function! s:outliner_line_display() abort
+    call s:outliner_disp_close()
+    let line = getline('.')
+    let line = line[:strridx(line, '@')-1]
+    if line[:3] != '    '
+        return
+    endif
+    if strdisplaywidth(line) <= winwidth(0)
+        return
+    endif
+
+    if has('popupwin')
+        let pop_opt = #{
+                    \ line: 'cursor',
+                    \ col: 'cursor-'.(virtcol('.')-1),
+                    \ pos: 'topleft',
+                    \ wrap: v:false,
+                    \ highlight: 'Normal',
+                    \ }
+        if s:popid < 0
+            let s:popid = popup_create(line, pop_opt)
+        else
+            call popup_setoptions(s:popid, pop_opt)
+            call popup_settext(s:popid, line)
+        endif
+        call win_execute(s:popid, 'setlocal cursorline')
+    elseif has('nvim')
+        if s:bufid < 0
+            let s:bufid = nvim_create_buf(v:false, v:true)
+        endif
+        call nvim_buf_set_lines(s:bufid, 0, -1, 0, [line])
+        let pop_opt = {
+                    \ 'relative': 'cursor',
+                    \ 'anchor': 'NW',
+                    \ 'height': 1,
+                    \ 'width': len(line),
+                    \ 'row': 0,
+                    \ 'col': -virtcol('.')+1,
+                    \ 'focusable': v:false,
+                    \ 'style': 'minimal',
+                    \ }
+        if s:popid < 0
+            let s:popid = nvim_open_win(s:bufid, v:false, pop_opt)
+        else
+            call nvim_win_set_config(s:popid, pop_opt)
+        endif
+        call win_execute(s:popid, "setlocal winhighlight=Normal:Normal")
+        call win_execute(s:popid, 'setlocal cursorline')
+    endif
+endfunction
+
+function! s:outliner_disp_close() abort
+    if s:popid >= 0
+        if has('popupwin')
+            call popup_close(s:popid)
+        elseif has('nvim')
+            call nvim_win_close(s:popid, v:false)
+        endif
+        let s:popid = -1
+    endif
+endfunction
+
+function! s:outliner_set_autocmd() abort
+    augroup outliner
+        autocmd!
+        autocmd CursorMoved <buffer> call s:outliner_line_display()
+        autocmd BufLeave <buffer> call s:outliner_disp_close()
+    augroup END
 endfunction
 
 function! outliner#show_status() abort
@@ -111,7 +188,7 @@ function! outliner#make_outliner() abort
             let pat = b:status.setting[k].pattern
             let shift = b:status.setting[k].line
             if match(line, pat) != -1
-                call add(table[k], printf("\t%s @ %d", getline(lnum+shift), lnum+shift))
+                call add(table[k], printf("    %s @ %d", getline(lnum+shift), lnum+shift))
             endif
         endfor
     endfor
@@ -135,18 +212,11 @@ function! outliner#make_outliner() abort
     nnoremap <buffer> - zC
     nnoremap <buffer> + zO
     call s:outliner_highlight()
+    call s:outliner_set_autocmd()
 endfunction
 
 function! outliner#clear() abort
-    if exists('g:outliner_win_conf')
-        if has_key(g:outliner_win_conf, 'name')
-            let name = g:outliner_win_conf.name
-        else
-            let name = s:name_def
-        endif
-    else
-        let name = s:name_def
-    endif
+    let name = s:get_config()[2]
 
     for win in range(1, winnr('$'))
         let winid = win_getid(win)
