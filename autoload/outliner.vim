@@ -83,6 +83,10 @@ function! s:outliner_line_display() abort
     if strdisplaywidth(line) <= winwidth(0)
         return
     endif
+    let thd = float2nr(0.9*&columns)
+    if len(line) > thd
+        let line = line[:thd]
+    endif
 
     if has('popupwin')
         let pop_opt = #{
