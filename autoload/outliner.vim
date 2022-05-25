@@ -69,6 +69,7 @@ endfunction
 function! s:outliner_highlight() abort
     syntax match OutLinerKeys /^\S.*/
     highlight default link OutLinerKeys Statement
+    highlight default OutLinerPoint ctermbg=11 guibg=Yellow
 endfunction
 
 let s:bufid = -1
@@ -80,7 +81,11 @@ function! s:outliner_line_display() abort
     if line[:3] != '    '
         return
     endif
-    if strdisplaywidth(line) <= winwidth(0)
+    let numwidth = &numberwidth
+    if len(line('$'))+1 > &numberwidth
+        let numwidth = len(line('$'))
+    endif
+    if strdisplaywidth(line) <= winwidth(0)-&foldcolumn-numwidth
         return
     endif
     let thd = float2nr(0.9*&columns)
@@ -139,11 +144,39 @@ function! s:outliner_disp_close() abort
     endif
 endfunction
 
+function! s:outliner_show_line() abort
+    let line = getline('.')
+    if line[:3] == '    '
+        echo line[4:]
+    endif
+endfunction
+
+function! <SID>outliner_hi_curpos(pre_winid, ol_winid, timer_id) abort
+    echomsg a:pre_winid
+    let lnum = line('.', a:pre_winid)
+    let [width, mod, name] = s:get_config()
+    let pre_num = 0
+    for i in range(1, line('$' a:ol_winid))
+        let line = getbufline(name, i)[0]
+        if line[:3] == '    '
+            let idx = strridx(line, '@')
+            if idx < 0
+                return
+            endif
+            let num = line[idx+2:]
+            if num > lnum && pre_num <= lnum
+                call win_execute(a:ol_winid, "matchaddpos('OutLinerPoint', [[i-1,2],[i-1,3]])")
+            endif
+        endif
+    endfor
+endfunction
+
 function! s:outliner_set_autocmd() abort
     augroup outliner
         autocmd!
         autocmd CursorMoved <buffer> call s:outliner_line_display()
         autocmd BufLeave <buffer> call s:outliner_disp_close()
+        autocmd CursorHold <buffer> call s:outliner_show_line()
     augroup END
 endfunction
 
@@ -211,12 +244,16 @@ function! outliner#make_outliner() abort
         call append('$', table[k])
         call append('$', '')
     endfor
+    setlocal nomodifiable
 
     nnoremap <buffer> <CR> <Cmd>call <SID>outliner_jump()<CR>
     nnoremap <buffer> - zC
     nnoremap <buffer> + zO
     call s:outliner_highlight()
     call s:outliner_set_autocmd()
+    let pre_winid = win_getid(winnr('#'))
+    let winid = win_getid()
+    " call timer_start(5000, function(expand('<SID>').'outliner_hi_curpos', [pre_winid, winid]), {'repeat':-1})
 endfunction
 
 function! outliner#clear() abort
