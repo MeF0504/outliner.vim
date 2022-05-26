@@ -6,32 +6,42 @@ function! s:get_config() abort
     let name_def = 'outliner'
     let width_def = 30
     let mod_def = 'topleft vertical'
+    let timer_def = 5000
     if exists('g:outliner_win_conf')
         if has_key(g:outliner_win_conf, 'width')
             let width = g:outliner_win_conf.width
         else
             let width = width_def
         endif
+
         if has_key(g:outliner_win_conf, 'mod')
             let mod = g:outliner_win_conf.mod
         else
             let mod = mod_def
         endif
+
         if has_key(g:outliner_win_conf, 'name')
             let name = g:outliner_win_conf.name
         else
             let name = name_def
         endif
+
+        if has_key(g:outliner_win_conf, 'timer')
+            let timer = g:outliner_win_conf.timer
+        else
+            let timer = timer_def
+        endif
     else
         let width = width_def
         let mod = mod_def
         let name = name_def
+        let timer = timer_def
     endif
-    return [width, mod, name]
+    return [width, mod, name, timer]
 endfunction
 
 function! s:create_win() abort
-    let [width, mod, name] = s:get_config()
+    let [width, mod, name, timer] = s:get_config()
 
     execute printf('%s %dnew %s', mod, width, name)
 
@@ -151,12 +161,17 @@ function! s:outliner_show_line() abort
     endif
 endfunction
 
+let s:timer_id = -1
 function! <SID>outliner_hi_curpos(pre_winid, ol_winid, timer_id) abort
-    echomsg a:pre_winid
     let lnum = line('.', a:pre_winid)
-    let [width, mod, name] = s:get_config()
+    let [width, mod, name, timer] = s:get_config()
+    let s:timer_id = a:timer_id
+    if bufwinid(name) == -1
+        return
+    endif
+    call clearmatches(a:ol_winid)
     let pre_num = 0
-    for i in range(1, line('$' a:ol_winid))
+    for i in range(1, line('$', a:ol_winid))
         let line = getbufline(name, i)[0]
         if line[:3] == '    '
             let idx = strridx(line, '@')
@@ -164,9 +179,15 @@ function! <SID>outliner_hi_curpos(pre_winid, ol_winid, timer_id) abort
                 return
             endif
             let num = line[idx+2:]
-            if num > lnum && pre_num <= lnum
-                call win_execute(a:ol_winid, "matchaddpos('OutLinerPoint', [[i-1,2],[i-1,3]])")
+            if num > lnum && pre_num <= lnum && pre_num != 0
+                call matchaddpos('OutLinerPoint', [[i-1,1],[i-1,2]], 10, -1, {'window': a:ol_winid})
             endif
+            let pre_num = num
+        else
+            if pre_num != 0 && lnum >= pre_num
+                call matchaddpos('OutLinerPoint', [[i-1,1],[i-1,2]], 10, -1, {'window': a:ol_winid})
+            endif
+            let pre_num = 0
         endif
     endfor
 endfunction
@@ -251,9 +272,14 @@ function! outliner#make_outliner() abort
     nnoremap <buffer> + zO
     call s:outliner_highlight()
     call s:outliner_set_autocmd()
+
     let pre_winid = win_getid(winnr('#'))
     let winid = win_getid()
-    " call timer_start(5000, function(expand('<SID>').'outliner_hi_curpos', [pre_winid, winid]), {'repeat':-1})
+    let timer = s:get_config()[3]
+    if s:timer_id != -1
+        call timer_stop(s:timer_id)
+    endif
+    call timer_start(timer, function(expand('<SID>').'outliner_hi_curpos', [pre_winid, winid]), {'repeat':-1})
 endfunction
 
 function! outliner#clear() abort
