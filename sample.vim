@@ -30,3 +30,10 @@ let g:outliner_settings.python = {
                 \},
             \}
 
+let g:outliner_win_conf = {
+            \ 'name': 'outliner',
+            \ 'width': 30,
+            \ 'mod': 'topleft vertical',
+            \ 'timer': 5000,
+            \ }
+
