@@ -163,12 +163,14 @@ endfunction
 
 let s:timer_id = -1
 function! <SID>outliner_hi_curpos(pre_winid, ol_winid, timer_id) abort
-    let lnum = line('.', a:pre_winid)
     let [width, mod, name, timer] = s:get_config()
     let s:timer_id = a:timer_id
     if bufwinid(name) == -1
+        call timer_stop(a:timer_id)
+        let s:timer_id = -1
         return
     endif
+    let lnum = line('.', a:pre_winid)
     call clearmatches(a:ol_winid)
     let pre_num = 0
     for i in range(1, line('$', a:ol_winid))
@@ -192,12 +194,20 @@ function! <SID>outliner_hi_curpos(pre_winid, ol_winid, timer_id) abort
     endfor
 endfunction
 
+function! s:outliner_set_map() abort
+    nnoremap <buffer> <CR> <Cmd>call <SID>outliner_jump()<CR>
+    nnoremap <buffer> - zC
+    nnoremap <buffer> + zO
+endfunction
+
 function! s:outliner_set_autocmd() abort
     augroup outliner
         autocmd!
         autocmd CursorMoved <buffer> call s:outliner_line_display()
         autocmd BufLeave <buffer> call s:outliner_disp_close()
         autocmd CursorHold <buffer> call s:outliner_show_line()
+        autocmd WinClosed <buffer> call timer_stop(s:timer_id) | let s:timer_id = -1
+        autocmd TabLeave * ++once call outliner#clear()
     augroup END
 endfunction
 
@@ -267,9 +277,7 @@ function! outliner#make_outliner() abort
     endfor
     setlocal nomodifiable
 
-    nnoremap <buffer> <CR> <Cmd>call <SID>outliner_jump()<CR>
-    nnoremap <buffer> - zC
-    nnoremap <buffer> + zO
+    call s:outliner_set_map()
     call s:outliner_highlight()
     call s:outliner_set_autocmd()
 
@@ -289,6 +297,8 @@ function! outliner#clear() abort
         let winid = win_getid(win)
         let bufnr = winbufnr(winid)
         if bufname(bufnr) == name
+            call timer_stop(s:timer_id)
+            let s:timer_id = -1
             call win_execute(winid, 'quit')
         endif
     endfor
