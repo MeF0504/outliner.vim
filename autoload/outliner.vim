@@ -206,8 +206,11 @@ function! s:outliner_set_autocmd() abort
         autocmd CursorMoved <buffer> call s:outliner_line_display()
         autocmd BufLeave <buffer> call s:outliner_disp_close()
         autocmd CursorHold <buffer> call s:outliner_show_line()
-        autocmd WinClosed <buffer> call timer_stop(s:timer_id) | let s:timer_id = -1
         autocmd TabLeave * ++once call outliner#clear()
+        let [width, mod, name, timer] = s:get_config()
+        if timer > 0
+            autocmd WinClosed <buffer> call timer_stop(s:timer_id) | let s:timer_id = -1
+        endif
     augroup END
 endfunction
 
@@ -284,21 +287,25 @@ function! outliner#make_outliner() abort
     let pre_winid = win_getid(winnr('#'))
     let winid = win_getid()
     let timer = s:get_config()[3]
-    if s:timer_id != -1
-        call timer_stop(s:timer_id)
+    if timer > 0
+        if s:timer_id != -1
+            call timer_stop(s:timer_id)
+        endif
+        call timer_start(timer, function(expand('<SID>').'outliner_hi_curpos', [pre_winid, winid]), {'repeat':-1})
     endif
-    call timer_start(timer, function(expand('<SID>').'outliner_hi_curpos', [pre_winid, winid]), {'repeat':-1})
 endfunction
 
 function! outliner#clear() abort
-    let name = s:get_config()[2]
+    let [width, mod, name, timer] = s:get_config()
 
     for win in range(1, winnr('$'))
         let winid = win_getid(win)
         let bufnr = winbufnr(winid)
         if bufname(bufnr) == name
-            call timer_stop(s:timer_id)
-            let s:timer_id = -1
+            if timer > 0
+                call timer_stop(s:timer_id)
+                let s:timer_id = -1
+            endif
             call win_execute(winid, 'quit')
         endif
     endfor
