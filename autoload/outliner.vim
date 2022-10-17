@@ -65,6 +65,9 @@ function! s:create_win() abort
 endfunction
 
 function! <SID>outliner_jump() abort
+    if foldclosed('.') > 0
+        return
+    endif
     let line = getline('.')
     let idx = strridx(line, '@')
     if idx < 0
@@ -74,6 +77,16 @@ function! <SID>outliner_jump() abort
     let lnum = line[idx+2:]
     wincmd p
     execute 'normal! '.lnum.'gg'
+endfunction
+
+function! s:outliner_fold(action) abort
+    if foldlevel('.') > 0
+        if a:action == 'close'
+            normal! zC
+        elseif a:action == 'open'
+            normal! zO
+        endif
+    endif
 endfunction
 
 function! s:outliner_highlight() abort
@@ -196,8 +209,8 @@ endfunction
 
 function! s:outliner_set_map() abort
     nnoremap <buffer> <CR> <Cmd>call <SID>outliner_jump()<CR>
-    nnoremap <buffer> - zC
-    nnoremap <buffer> + zO
+    nnoremap <buffer> - <Cmd>call <SID>outliner_fold('close')<CR>
+    nnoremap <buffer> + <Cmd>call <SID>outliner_fold('open')<CR>
 endfunction
 
 function! s:outliner_set_autocmd() abort
